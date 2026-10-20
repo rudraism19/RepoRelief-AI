@@ -18,14 +18,13 @@ Enter any public GitHub repository as `owner/repo` or paste its GitHub URL, then
 - **Challenge:** [Slow and Steady — Week 3](https://dev.to/challenges/hacktoberfest-week3-2026-10-19)
 - **Live demo:** https://rudraism19-reporelief-ai-app-uygfnh.streamlit.app/
 - **Source code:** https://github.com/rudraism19/RepoRelief-AI
-- **Implementation approach:** Python, Streamlit, GitHub REST API, and deterministic rule-based heuristics.
+- **Implementation:** Python, Streamlit, GitHub REST API, and deterministic rule-based heuristics.
 
-### Prize category eligibility
+### Prize category
 
-This repository currently documents Antigravity-assisted development and explicitly records that GitHub Copilot was **not used**. Therefore, it does **not** claim eligibility for **Best Use of GitHub Copilot**. Only list that partner category if Copilot is genuinely used for meaningful development work and the submission accurately explains that contribution.
+**Best Use of GitHub Copilot — eligibility must be supported by genuine Copilot-assisted development.** Include this category in the final submission only after GitHub Copilot has been used for meaningful implementation, testing, code review, or another qualifying contribution. Describe the actual Copilot contribution accurately and retain evidence where possible.
 
-Also note: the current triage engine is deterministic and does not use an open-weight model, AI agent harness, or local inference. Before submitting to the Open-Source AI challenge, check the official rules and make sure the implementation satisfies the challenge's open-source AI requirement; do not describe rule-based heuristics as an AI model.
-
+The current triage engine is deterministic and does not use an open-weight model, AI agent harness, or local inference. Check the official challenge rules to confirm that the project meets the Open-Source AI challenge requirements before submitting. Do not describe rule-based heuristics as an AI model.
 
 ## 📌 Problem & Proposed Solution
 
@@ -227,14 +226,9 @@ When taking screenshots of RepoRelief AI for hackathon submissions or demos, cap
 
 ---
 
-## 🤖 AI-Tool Attribution
+## 🤖 Development & Tool Attribution
 
-In compliance with open-source hackathon guidelines:
-- **Architecture, Code & Tests:** Authored with the assistance of the Google DeepMind Antigravity AI pair programming environment.
-- **GitHub Copilot:** Not used.
-- **Cloud LLM APIs:** Zero paid third-party APIs used. Powered entirely by a deterministic Python engine.
-
----
+RepoRelief AI uses a deterministic Python rule-based engine. It does not use Ollama, a local LLM, or a third-party generative AI API. Keep tool attribution in the project description accurate. Do not claim GitHub Copilot was used unless it genuinely contributed to development.
 
 ## 📄 License
 
