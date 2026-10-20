@@ -1,3 +1,5 @@
+<img src = https://raw.githubusercontent.com/rudraism19/RepoRelief-AI/main/assets/cover.jpg>
+
 # 🛡️ RepoRelief AI
 
 > **A lightweight, accessible, read-only GitHub issue triage assistant designed for open-source maintainers.**  
