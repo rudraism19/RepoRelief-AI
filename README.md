@@ -5,6 +5,28 @@
 
 ---
 
+
+
+## 🌐 Live Demo
+
+**Try RepoRelief AI:** https://rudraism19-reporelief-ai-app-uygfnh.streamlit.app/
+
+Enter any public GitHub repository as `owner/repo` or paste its GitHub URL, then fetch and triage open issues. The hosted app uses a deterministic rule-based engine and does not require Ollama or an AI API key. Availability and GitHub's unauthenticated API rate limits may affect live use.
+
+## 🏆 Hacktoberfest Open-Source AI Challenge — Week 3
+
+- **Challenge:** [Slow and Steady — Week 3](https://dev.to/challenges/hacktoberfest-week3-2026-10-19)
+- **Live demo:** https://rudraism19-reporelief-ai-app-uygfnh.streamlit.app/
+- **Source code:** https://github.com/rudraism19/RepoRelief-AI
+- **Implementation approach:** Python, Streamlit, GitHub REST API, and deterministic rule-based heuristics.
+
+### Prize category eligibility
+
+This repository currently documents Antigravity-assisted development and explicitly records that GitHub Copilot was **not used**. Therefore, it does **not** claim eligibility for **Best Use of GitHub Copilot**. Only list that partner category if Copilot is genuinely used for meaningful development work and the submission accurately explains that contribution.
+
+Also note: the current triage engine is deterministic and does not use an open-weight model, AI agent harness, or local inference. Before submitting to the Open-Source AI challenge, check the official rules and make sure the implementation satisfies the challenge's open-source AI requirement; do not describe rule-based heuristics as an AI model.
+
+
 ## 📌 Problem & Proposed Solution
 
 ### The Problem
