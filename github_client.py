@@ -7,6 +7,7 @@ parsing repository identifiers, and tracking API rate limits.
 from __future__ import annotations
 
 import datetime
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -217,14 +218,22 @@ class GitHubClient:
         """Initialize the client.
 
         Args:
-            token: Optional GitHub Personal Access Token for higher rate limits.
+            token: Optional GitHub Personal Access Token. If None, checks the
+                GITHUB_TOKEN environment variable. If empty or not set, requests
+                are sent unauthenticated.
             timeout: Network timeout in seconds.
             session: Optional custom requests session (useful for test mocking).
         """
-        self.token = token.strip() if token and token.strip() else None
+        raw_token = os.getenv("GITHUB_TOKEN", "") if token is None else token
+        self.token = raw_token.strip() if raw_token and raw_token.strip() else None
         self.timeout = timeout
         self.session = session or requests.Session()
         self._last_rate_limit: GitHubRateLimit | None = None
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Return True if an authentication token is configured."""
+        return self.token is not None
 
     @property
     def last_rate_limit(self) -> GitHubRateLimit | None:
@@ -294,9 +303,11 @@ class GitHubClient:
         max_issues: int = 30,
         state: str = "open",
     ) -> tuple[list[GitHubIssue], GitHubRateLimit]:
-        """Fetch open issues for a public repository.
+        """Fetch open issues for a public repository using GitHub's REST API.
 
         Excludes pull requests (which GitHub returns on the issues endpoint).
+        Uses GET requests to https://api.github.com/repos/{owner}/{repo}/issues
+        with state=open and per_page=100.
 
         Args:
             owner: Repository owner/organization.
@@ -315,10 +326,11 @@ class GitHubClient:
         """
         issues: list[GitHubIssue] = []
         page = 1
-        per_page = min(max(max_issues, 10), 100)
+        per_page = 100
+        max_pages = max(10, (max_issues // 100) + 3)
         rate_info = GitHubRateLimit(limit=60, remaining=60, reset_timestamp=0)
 
-        while len(issues) < max_issues:
+        while len(issues) < max_issues and page <= max_pages:
             url = f"{self.BASE_URL}/repos/{owner}/{repo}/issues"
             params = {
                 "state": state,
@@ -337,7 +349,11 @@ class GitHubClient:
                 )
             except requests.exceptions.Timeout as exc:
                 raise GitHubAPIError(
-                    f"Connection timed out while fetching issues from {owner}/{repo}. Check your network."
+                    f"Connection timed out while fetching issues from {owner}/{repo}. Please check your internet connection."
+                ) from exc
+            except requests.exceptions.ConnectionError as exc:
+                raise GitHubAPIError(
+                    f"Failed to connect to GitHub API ({owner}/{repo}). Please check your internet connection."
                 ) from exc
             except requests.exceptions.RequestException as exc:
                 raise GitHubAPIError(
@@ -372,19 +388,18 @@ class GitHubClient:
 
             elif response.status_code == 404:
                 raise GitHubNotFoundError(
-                    f"Repository '{owner}/{repo}' not found. Please verify the URL or ensure the repository is public."
+                    f"Repository '{owner}/{repo}' was not found. Please verify that the repository name is spelled correctly and that the repository is public."
                 )
             elif response.status_code in (403, 429):
                 err_msg = response.json().get("message", "API rate limit exceeded.") if response.content else "Rate limit exceeded"
                 raise GitHubRateLimitError(
-                    f"GitHub API rate limit reached: {err_msg}. "
-                    f"Resets at {rate_info.reset_time_formatted}. "
-                    "Consider providing an optional GitHub Personal Access Token to raise the limit.",
+                    f"GitHub API rate limit reached: {err_msg}. Hourly quota resets at {rate_info.reset_time_formatted}. "
+                    "You can wait until the reset time, or optionally configure an unprivileged GITHUB_TOKEN environment variable to raise the hourly quota.",
                     reset_timestamp=rate_info.reset_timestamp,
                 )
             elif response.status_code == 401:
                 raise GitHubAuthError(
-                    "Invalid or expired GitHub Personal Access Token provided."
+                    "GitHub Personal Access Token is invalid or expired."
                 )
             else:
                 detail = response.text[:200] if response.text else "No details"

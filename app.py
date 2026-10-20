@@ -1,8 +1,8 @@
 """RepoRelief AI — Streamlit Application
 
-A lightweight, read-only GitHub issue triage assistant designed for open-source maintainers.
-Provides transparent classification, priority estimation, missing reproduction audits,
-and actionable investigation checklists using deterministic heuristics or optional local Ollama LLMs.
+A lightweight, accessible, read-only GitHub issue triage assistant designed for open-source maintainers.
+Provides transparent heuristic classification, P0–P3 priority estimation, missing reproduction audits,
+and actionable investigation checklists using a 100% deterministic rule-based engine.
 """
 
 from __future__ import annotations
@@ -20,16 +20,16 @@ from github_client import (
     GitHubAPIError,
     GitHubAuthError,
     GitHubClient,
+    GitHubIssue,
     GitHubNotFoundError,
     GitHubRateLimitError,
     parse_github_url,
 )
 from triage_engine import (
-    OllamaClient,
     TriageCategory,
     TriagePriority,
+    TriageResult,
     triage_issue,
-    triage_issue_heuristically,
 )
 
 # Load optional .env variables
@@ -43,41 +43,54 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom Styling for polished UI cards and badges
+# High-contrast CSS styling for accessibility (WCAG AA/AAA compliant)
 st.markdown(
     """
     <style>
-    .metric-card {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        padding: 14px 18px;
-        text-align: center;
-    }
+    /* High-contrast badges with solid backgrounds and white text */
     .badge {
         display: inline-block;
-        padding: 3px 8px;
-        font-size: 12px;
-        font-weight: 600;
-        border-radius: 12px;
-        margin-right: 6px;
-    }
-    .badge-p0 { background-color: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
-    .badge-p1 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2; }
-    .badge-p2 { background-color: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
-    .badge-p3 { background-color: #f1f8e9; color: #33691e; border: 1px solid #dcedc8; }
-    .badge-bug { background-color: #fce4ec; color: #ad1457; }
-    .badge-feature { background-color: #ede7f6; color: #4527a0; }
-    .badge-doc { background-color: #e0f2f1; color: #00695c; }
-    .badge-question { background-color: #fff8e1; color: #f57f17; }
-    .badge-other { background-color: #eceff1; color: #37474f; }
-    .privacy-box {
-        background-color: #f0f7ff;
-        border-left: 4px solid #0066cc;
-        padding: 10px 14px;
-        border-radius: 4px;
+        padding: 4px 10px;
         font-size: 13px;
-        margin-top: 15px;
+        font-weight: 700;
+        border-radius: 4px;
+        margin-right: 8px;
+        margin-bottom: 6px;
+        letter-spacing: 0.3px;
+    }
+    .badge-p0 { background-color: #b71c1c; color: #ffffff !important; }
+    .badge-p1 { background-color: #d84315; color: #ffffff !important; }
+    .badge-p2 { background-color: #0d47a1; color: #ffffff !important; }
+    .badge-p3 { background-color: #2e7d32; color: #ffffff !important; }
+    
+    .badge-bug { background-color: #880e4f; color: #ffffff !important; }
+    .badge-feature { background-color: #4a148c; color: #ffffff !important; }
+    .badge-doc { background-color: #004d40; color: #ffffff !important; }
+    .badge-question { background-color: #e65100; color: #ffffff !important; }
+    .badge-other { background-color: #37474f; color: #ffffff !important; }
+    
+    .badge-repro-complete { background-color: #1b5e20; color: #ffffff !important; }
+    .badge-repro-partial { background-color: #e65100; color: #ffffff !important; }
+    .badge-repro-missing { background-color: #b71c1c; color: #ffffff !important; }
+    
+    .badge-engine { background-color: #263238; color: #ffffff !important; }
+    .badge-conf { background-color: #1a237e; color: #ffffff !important; }
+
+    /* Accessible Privacy & Guarantee Notice */
+    .accessible-notice {
+        background-color: #e8f4fd;
+        border-left: 6px solid #0056b3;
+        color: #0b2545;
+        padding: 14px 18px;
+        border-radius: 6px;
+        font-size: 14px;
+        line-height: 1.5;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .accessible-notice strong {
+        color: #003366;
     }
     </style>
     """,
@@ -86,8 +99,8 @@ st.markdown(
 
 
 def get_priority_badge(priority_val: str) -> str:
-    css_class = f"badge-p{priority_val[1:]}" if len(priority_val) >= 2 else "badge-p2"
-    return f'<span class="badge {css_class}">Priority: {priority_val}</span>'
+    p_num = priority_val[1:] if len(priority_val) >= 2 else "2"
+    return f'<span class="badge badge-p{p_num}">Priority: {priority_val}</span>'
 
 
 def get_category_badge(cat_val: str) -> str:
@@ -103,82 +116,101 @@ def get_category_badge(cat_val: str) -> str:
     return f'<span class="badge {css}">{label}</span>'
 
 
+def get_repro_badge(completeness: str) -> str:
+    if completeness == "Complete":
+        css = "badge-repro-complete"
+    elif completeness == "Partial":
+        css = "badge-repro-partial"
+    else:
+        css = "badge-repro-missing"
+    return f'<span class="badge {css}">Repro: {completeness}</span>'
+
+
 def render_sidebar() -> dict[str, Any]:
     st.sidebar.title("🛡️ RepoRelief AI")
     st.sidebar.caption("Open-Source Issue Triage Assistant")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Target Repository")
+    st.sidebar.subheader("Public Repository")
 
-    # Sample Repositories helper
-    sample_repos = [
-        "Select a sample repository...",
+    # Session state to hold arbitrary repository input
+    if "custom_repo_target" not in st.session_state:
+        st.session_state.custom_repo_target = "pallets/flask"
+
+    # Optional quick-load suggestions (does not restrict custom input)
+    sample_options = [
+        "-- Choose a suggestion (optional) --",
         "pallets/flask",
         "psf/requests",
-        "encode/starlette",
         "tiangolo/fastapi",
-        "pydantic/pydantic",
+        "encode/starlette",
+        "facebook/react",
+        "torvalds/linux",
+        "python/cpython",
+        "golang/go",
     ]
-    selected_sample = st.sidebar.selectbox("Quick-load sample repo:", sample_repos)
-    default_repo = selected_sample if selected_sample != sample_repos[0] else "pallets/flask"
-
-    repo_input = st.sidebar.text_input(
-        "GitHub Repo URL or owner/repo:",
-        value=default_repo,
-        help="Accepts 'owner/repo', 'https://github.com/owner/repo', or GitHub issue URLs.",
+    picked_suggestion = st.sidebar.selectbox(
+        "Quick-load suggestions (Optional):",
+        sample_options,
+        index=0,
+        help="Optional shortcuts. You can enter ANY public GitHub repository in the text box below.",
     )
+    if picked_suggestion and picked_suggestion != sample_options[0]:
+        if picked_suggestion != st.session_state.custom_repo_target:
+            st.session_state.custom_repo_target = picked_suggestion
+
+    # Unrestricted text input for ANY public GitHub repository
+    repo_input = st.sidebar.text_input(
+        "Enter ANY Public GitHub Repository:",
+        value=st.session_state.custom_repo_target,
+        placeholder="owner/repo or https://github.com/owner/repo",
+        help="Type ANY public GitHub repository worldwide (e.g. 'owner/repo' or 'https://github.com/owner/repo'). Not restricted to suggestions.",
+    )
+    st.session_state.custom_repo_target = repo_input
 
     max_issues = st.sidebar.slider(
         "Max issues to retrieve:",
-        min_value=5,
-        max_value=50,
-        value=15,
-        step=5,
-        help="Higher values take more API requests. Public unauthenticated limit is 60 req/hr.",
+        min_value=10,
+        max_value=250,
+        value=30,
+        step=10,
+        help="Number of open issues to fetch and triage. Supports pagination beyond 100 issues.",
     )
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Triage Engine")
-
-    engine_mode = st.sidebar.radio(
-        "Select Analysis Mode:",
-        [
-            "Rule-Based Engine (Deterministic)",
-            "Local LLM via Ollama (Optional)",
-        ],
-        index=0,
-        help=(
-            "Rule-Based works instantly without dependencies and with 0 RAM overhead. "
-            "Local LLM uses your installed Ollama instance (e.g. llama3.2:3b) and falls back safely to rules."
-        ),
+    st.sidebar.info(
+        "⚙️ **Deterministic Rule-Based Engine**\n\n"
+        "• 100% Transparent heuristics\n"
+        "• Zero LLM/API dependencies\n"
+        "• Instant execution & 0 RAM bloat"
     )
-
-    use_llm = engine_mode == "Local LLM via Ollama (Optional)"
-    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-
-    if use_llm:
-        st.sidebar.markdown("##### 🦙 Ollama Configuration")
-        ollama_url = st.sidebar.text_input("Ollama Host URL:", value=ollama_url)
-        ollama_model = st.sidebar.text_input("Ollama Model Name:", value=ollama_model)
-
-        if st.sidebar.button("Test Ollama Connection"):
-            test_client = OllamaClient(base_url=ollama_url, model=ollama_model)
-            online, msg = test_client.check_health()
-            if online:
-                st.sidebar.success(f"Connected! {msg}")
-            else:
-                st.sidebar.warning(f"Ollama not detected: {msg}. Will fall back to rule-based engine.")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Authentication (Optional)")
-    env_token = os.getenv("GITHUB_TOKEN", "")
+    st.sidebar.subheader("GitHub Authentication (Optional)")
+    
+    # Optional token input with empty default
     token_input = st.sidebar.text_input(
-        "GitHub Personal Access Token:",
-        value=env_token,
+        "Personal Access Token:",
+        value=os.getenv("GITHUB_TOKEN", ""),
         type="password",
-        help="Optional. Public repositories work without a token. A token raises rate limit from 60 to 5,000 requests/hour.",
+        placeholder="Optional (leave empty for public API)",
+        help="Optional. Leave empty to query GitHub's public REST API unauthenticated (60 req/hr quota). "
+             "If provided, it is sent as an optional Bearer token to raise your rate limit to 5,000 req/hr.",
     )
+
+    clean_token = token_input.strip() if token_input.strip() else None
+
+    if clean_token:
+        st.sidebar.success(
+            "🔑 **Bearer Token Provided**\n\n"
+            "Authenticated mode enabled (Quota: 5,000 req/hr)."
+        )
+    else:
+        st.sidebar.info(
+            "🌐 **Token Field Empty**\n\n"
+            "Unauthenticated public REST API active (Quota: 60 req/hr). No token required!"
+        )
 
     fetch_button = st.sidebar.button(
         "🚀 Fetch & Triage Issues",
@@ -189,12 +221,12 @@ def render_sidebar() -> dict[str, Any]:
     st.sidebar.markdown("---")
     st.sidebar.markdown(
         """
-        <div style='font-size: 11px; color: #666;'>
-        <strong>Privacy & Security:</strong><br/>
-        • 100% Read-Only (no write API calls)<br/>
-        • Zero cloud LLM API keys required<br/>
-        • Input sanitized against prompt injections<br/>
-        • Local analysis only
+        <div style='font-size: 12px; line-height: 1.4; color: #495057;'>
+        <strong>Security & Privacy Guarantees:</strong><br/>
+        • <strong>Token Optional:</strong> Default workflow works 100% without authentication.<br/>
+        • <strong>100% Read-Only:</strong> Never comments, labels, modifies, or closes issues.<br/>
+        • <strong>Zero Cost:</strong> No paid APIs, credits, or billing.<br/>
+        • <strong>Local Processing:</strong> Issues analyzed in-memory on your machine.
         </div>
         """,
         unsafe_allow_html=True,
@@ -203,10 +235,7 @@ def render_sidebar() -> dict[str, Any]:
     return {
         "repo_input": repo_input,
         "max_issues": max_issues,
-        "use_llm": use_llm,
-        "ollama_url": ollama_url,
-        "ollama_model": ollama_model,
-        "token": token_input,
+        "token": clean_token,
         "fetch_button": fetch_button,
     }
 
@@ -217,23 +246,23 @@ def main() -> None:
     # Main Page Title & Header
     st.title("🛡️ RepoRelief AI")
     st.markdown(
-        "**Lightweight GitHub Issue Triage Assistant for Open-Source Maintainers.** "
-        "Understand incoming issues faster, identify missing reproduction details, and prioritize work objectively."
+        "**Lightweight, accessible GitHub issue triage assistant for open-source maintainers.** "
+        "Quickly classify issues, estimate impact priority, audit reproduction completeness, and get actionable investigation checklists."
     )
 
-    # Privacy and Read-Only Banner
+    # High-contrast Accessible Privacy Banner
     st.markdown(
         """
-        <div class="privacy-box">
-            <strong>🔒 Read-Only & Privacy Assurance:</strong> RepoRelief AI never alters, labels, comments on, or closes issues.
-            Data is fetched from public GitHub repositories and processed entirely in-memory on your machine.
+        <div class="accessible-notice" role="region" aria-label="Privacy and Read-Only Assurance">
+            <strong>🔒 Read-Only & Privacy Assurance:</strong> RepoRelief AI is strictly read-only.
+            It communicates only with GitHub's public REST API to retrieve open issues and processes them entirely
+            in-memory using deterministic heuristics. No data is stored or transmitted to external AI cloud services.
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
 
-    # Initialize session state for storing triage results
+    # Initialize session state
     if "triage_results" not in st.session_state:
         st.session_state.triage_results = None
     if "current_repo" not in st.session_state:
@@ -255,11 +284,6 @@ def main() -> None:
             return
 
         client = GitHubClient(token=config["token"])
-        ollama_client = (
-            OllamaClient(base_url=config["ollama_url"], model=config["ollama_model"])
-            if config["use_llm"]
-            else None
-        )
 
         with st.status(f"Fetching issues for {repo_ref.full_name}...", expanded=True) as status:
             st.write(f"Connecting to GitHub REST API (Target: `{repo_ref.full_name}`)...")
@@ -295,16 +319,12 @@ def main() -> None:
                 st.session_state.current_repo = repo_ref.full_name
                 return
 
-            st.write(f"Retrieved {len(issues)} open issues (pull requests filtered out). Triaging...")
+            st.write(f"Retrieved {len(issues)} open issues (pull requests excluded). Triaging with heuristic engine...")
 
-            results = []
+            results: list[tuple[GitHubIssue, TriageResult]] = []
             progress_bar = st.progress(0.0)
             for idx, issue in enumerate(issues):
-                res = triage_issue(
-                    issue=issue,
-                    use_llm=config["use_llm"],
-                    ollama_client=ollama_client,
-                )
+                res = triage_issue(issue=issue)
                 results.append((issue, res))
                 progress_bar.progress((idx + 1) / len(issues))
 
@@ -318,7 +338,7 @@ def main() -> None:
 
     # Display Results if available
     if st.session_state.triage_results is not None and len(st.session_state.triage_results) > 0:
-        results: list[tuple[Any, Any]] = st.session_state.triage_results
+        results: list[tuple[GitHubIssue, TriageResult]] = st.session_state.triage_results
         repo_name = st.session_state.current_repo
 
         # Top summary metrics
@@ -334,15 +354,25 @@ def main() -> None:
         c1.metric("Total Issues", total)
         c2.metric("Bugs", bugs_count)
         c3.metric("Features", features_count)
-        c4.metric("Urgent (P0/P1)", urgent_count, delta="Requires action" if urgent_count > 0 else "Clear", delta_color="inverse")
-        c5.metric("Missing Repro", missing_repro_count, delta="Incomplete" if missing_repro_count > 0 else "Good", delta_color="inverse")
+        c4.metric(
+            "Urgent (P0/P1)",
+            urgent_count,
+            delta="Requires action" if urgent_count > 0 else "Clear",
+            delta_color="inverse",
+        )
+        c5.metric(
+            "Missing Repro",
+            missing_repro_count,
+            delta="Incomplete" if missing_repro_count > 0 else "Good",
+            delta_color="inverse",
+        )
 
-        # Rate Limit info banner
+        # Rate Limit Quota Banner
         if st.session_state.rate_limit_info:
             rl = st.session_state.rate_limit_info
             st.caption(
                 f"GitHub API Quota: **{rl.remaining}/{rl.limit}** requests remaining. "
-                f"Resets at {rl.reset_time_formatted}."
+                f"Reset time: {rl.reset_time_formatted}."
             )
 
         # Filters and search
@@ -351,11 +381,11 @@ def main() -> None:
         f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 3])
 
         category_filter = f_col1.selectbox(
-            "Category:",
+            "Filter Category:",
             ["All", "Bug", "Feature Request", "Documentation", "Question", "Other"],
         )
         priority_filter = f_col2.selectbox(
-            "Priority:",
+            "Filter Priority:",
             ["All", "P0 (Blocker)", "P1 (High)", "P2 (Medium)", "P3 (Low)"],
         )
         repro_filter = f_col3.selectbox(
@@ -388,43 +418,27 @@ def main() -> None:
 
             filtered_results.append((issue, res))
 
-        st.caption(f"Showing **{len(filtered_results)}** of **{len(results)}** issues")
+        st.caption(f"Showing **{len(filtered_results)}** of **{len(results)}** triaged issues")
 
         # Render each issue card
         for issue, res in filtered_results:
             with st.container():
                 st.markdown(
                     f"#### [#{issue.number}: {issue.title}]({issue.html_url})",
-                    help="Click to open this issue on GitHub (new tab)",
+                    help="Click to open this issue directly on GitHub in a new tab",
                 )
 
-                # Badges row
+                # High-contrast badges row
                 cat_badge = get_category_badge(res.category.value)
                 prio_badge = get_priority_badge(res.priority.value)
-
-                repro_color = (
-                    "green"
-                    if res.reproduction.completeness == "Complete"
-                    else "orange"
-                    if res.reproduction.completeness == "Partial"
-                    else "red"
-                )
-                repro_badge = f'<span class="badge" style="background-color: #f5f5f5; color: {repro_color}; border: 1px solid #ccc;">Repro: {res.reproduction.completeness}</span>'
-
-                conf_badge = f'<span class="badge" style="background-color: #e8eaf6; color: #283593;">Confidence: {res.confidence.value}</span>'
-                method_badge = f'<span class="badge" style="background-color: #eceff1; color: #455a64;">Engine: {res.method}</span>'
+                repro_badge = get_repro_badge(res.reproduction.completeness)
+                conf_badge = f'<span class="badge badge-conf">Confidence: {res.confidence.value}</span>'
+                engine_badge = '<span class="badge badge-engine">Engine: Deterministic Rules</span>'
 
                 st.markdown(
-                    f"{cat_badge} {prio_badge} {repro_badge} {conf_badge} {method_badge}",
+                    f"{prio_badge} {cat_badge} {repro_badge} {conf_badge} {engine_badge}",
                     unsafe_allow_html=True,
                 )
-
-                # If LLM fallback occurred, display notice
-                if res.fallback_reason:
-                    st.warning(
-                        f"⚠️ **LLM Fallback Activated:** {res.fallback_reason}. "
-                        "Transparently analyzed using deterministic heuristics."
-                    )
 
                 # Summary & Reason
                 st.markdown(f"**Summary:** {res.summary}")
@@ -433,7 +447,7 @@ def main() -> None:
                 )
                 st.caption(f"Confidence Assessment: {res.confidence_explanation}")
 
-                # Tabs for Details: Missing Repro, Checklist, and Original Issue
+                # Tabs for Detailed Breakdown
                 tab_repro, tab_checklist, tab_original = st.tabs(
                     ["🔍 Reproduction Audit", "📋 Actionable Checklist", "📄 Original Issue Body"]
                 )
@@ -460,7 +474,7 @@ def main() -> None:
                 with tab_checklist:
                     st.markdown("**Maintainer Next Steps:**")
                     for step in res.investigation_checklist:
-                        st.checkbox(step, key=f"check_{issue.number}_{step[:25]}")
+                        st.checkbox(step, key=f"check_{issue.number}_{hash(step)}")
 
                 with tab_original:
                     if issue.body.strip():
@@ -493,6 +507,7 @@ def main() -> None:
                     "issue_number": issue.number,
                     "title": issue.title,
                     "author": issue.author,
+                    "created_at": issue.created_at,
                     "category": res.category.value,
                     "priority": res.priority.value,
                     "priority_reasoning": res.priority_reasoning,
@@ -518,7 +533,7 @@ def main() -> None:
         )
 
     elif st.session_state.triage_results is not None and len(st.session_state.triage_results) == 0:
-        st.info("No open issues found for this repository.")
+        st.info("No open issues found for this repository (excluding pull requests).")
     else:
         # Welcome & Empty State Guide
         st.info(
@@ -534,7 +549,7 @@ def main() -> None:
             - **🔍 Reproduction Audit:** Automatically checks for reproduction steps, expected/actual outcomes, environment specs, and stack traces.
             - **📋 Actionable Checklist:** Generates immediate next steps for maintainers.
             - **🛡️ 100% Read-Only:** Safely inspects issues without modifying, commenting on, or labeling your repository.
-            - **⚙️ Deterministic & Local:** Runs completely on your machine with 0 external AI API costs.
+            - **⚙️ Deterministic & Local:** Runs completely on your machine with 0 external AI API costs and zero GPU requirements.
             """
         )
 

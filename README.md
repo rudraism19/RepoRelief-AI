@@ -1,28 +1,27 @@
 # 🛡️ RepoRelief AI
 
-> **A lightweight, read-only GitHub issue triage assistant designed for open-source maintainers.**  
+> **A lightweight, accessible, read-only GitHub issue triage assistant designed for open-source maintainers.**  
 > Built for **Hacktoberfest 2026**. Fast, deterministic, privacy-first, and runs seamlessly on standard laptops (8 GB RAM, no GPU required).
 
 ---
 
-## 📌 Problem & Solution
+## 📌 Problem & Proposed Solution
 
 ### The Problem
-Open-source maintainers often spend hours sorting through incoming GitHub issues:
-- **Missing Reproduction Information:** Contributors frequently submit reports without steps to reproduce, environment versions, or stack traces.
-- **Triage Fatigue:** High issue volumes make it difficult to prioritize urgent blockers (`P0`/`P1`) over minor bugs or feature requests.
-- **Resource Constraints:** Most maintainers cannot afford expensive cloud AI API subscriptions, GPU infrastructure, or complex enterprise SaaS setups.
-- **Security Risks:** Issue titles and descriptions are untrusted user input that can contain prompt injections or malicious instructions.
+Open-source maintainers often spend countless hours sifting through incoming GitHub issues:
+- **Incomplete Bug Reports:** Contributors frequently submit reports missing critical reproduction steps, operating system details, runtime versions, or tracebacks.
+- **Triage Fatigue & Delay:** Distinguishing critical blockers (`P0`/`P1`) from minor cosmetic nits or questions is mentally exhausting during high-volume spikes.
+- **Expensive AI Tooling & Bloat:** Most triage solutions require paid cloud AI subscriptions, API key management, external cloud hosting, or heavy GPUs.
+- **Security & Untrusted Input Risks:** Issue descriptions and titles are untrusted user input that can contain prompt injections or unwanted instructions.
 
-### The Solution: RepoRelief AI
-**RepoRelief AI** brings order to repository triage without costs, cloud dependencies, or security compromises:
-1. **100% Read-Only Safety:** Strictly consumes public GitHub REST API endpoints (`GET /repos/{owner}/{repo}/issues`). It has **zero** write capabilities—it cannot edit, label, comment on, or close issues.
-2. **Dual-Engine Architecture:**
-   - **Deterministic Heuristic Engine (Default):** Instant, rule-based categorization, priority ranking, and reproduction auditing with zero RAM overhead.
-   - **Optional Local LLM (Ollama):** Supports small local models like `llama3.2:3b` via Ollama for deeper semantic summarization, with automatic, transparent fallback to the rule engine if Ollama is unavailable.
-3. **Anti-Prompt-Injection Defenses:** Treats all issue data as untrusted text, sanitizing prompt overrides and isolating content inside XML delimiters.
-4. **Actionable Checklists:** Automatically audits issues for missing reproduction pillars and produces an immediate 3–5 step investigation checklist for maintainers.
-5. **Instant Export:** Export triaged issues and checklists directly to JSON or CSV for team workflows.
+### The Proposed Solution: RepoRelief AI
+**RepoRelief AI** delivers fast, transparent, and structured issue triage with zero API costs, zero cloud dependencies, and strict security:
+1. **100% Deterministic Rule-Based Engine:** Completely transparent classification, priority ranking, and reproduction auditing. Executes in milliseconds with zero RAM bloat.
+2. **Strictly Read-Only Safety:** Exclusively issues HTTP `GET` requests against public GitHub REST API endpoints (`/repos/{owner}/{repo}/issues` and `/rate_limit`). It has **zero** write capabilities—it cannot edit, label, comment on, or close issues.
+3. **Anti-Prompt-Injection & Length Defenses:** Treats all issue data as untrusted text, sanitizing prompt overrides, stripping non-printable control characters, and bounding lengths.
+4. **4-Pillar Reproduction Audit:** Evaluates issues against essential reproduction elements (reproduction steps, expected vs. actual outcomes, environment specifications, and code/traceback logs).
+5. **Actionable Checklists:** Automatically derives a 3–5 step concrete investigation checklist for maintainers tailored to the category and priority.
+6. **Accessible UI & Instant Export:** High-contrast WCAG-compliant interface with one-click export of triaged issues to JSON or CSV.
 
 ---
 
@@ -31,22 +30,14 @@ Open-source maintainers often spend hours sorting through incoming GitHub issues
 ```mermaid
 flowchart TD
     User([User / Maintainer]) -->|Enters Repo URL or owner/repo| UI[Streamlit Web UI - app.py]
-    UI -->|Validates Slug/URL| Validator[URL Validator & Sanitizer]
+    UI -->|Validates Slug/URL| Validator[URL Validator & Parser]
     Validator -->|GET /repos/owner/repo/issues| GH[GitHub Public REST API]
     GH -->|JSON Issues Stream| Filter[PR Filter: Drops Pull Requests]
     Filter -->|Untrusted Issue Stream| Sanitizer[Security Sanitizer: Strips Injection Tokens]
     
-    Sanitizer --> EngineRouter{Engine Mode}
+    Sanitizer --> Engine[Deterministic Rule-Based Triage Engine<br/>• Label & Keyword Weighting<br/>• Documented P0-P3 Priority Heuristics<br/>• 4-Pillar Reproduction Audit<br/>• Maintainer Investigation Checklists]
     
-    EngineRouter -->|Default: Offline| Heuristics[Deterministic Rule Engine<br/>• Label & Keyword Weighting<br/>• P0-P3 Priority Heuristics<br/>• 4-Pillar Repro Audit]
-    
-    EngineRouter -->|Optional: Local LLM| OllamaCheck{Ollama Available?}
-    OllamaCheck -->|Yes: HTTP 11434| Ollama[Local Ollama: llama3.2:3b<br/>Structured JSON Output]
-    OllamaCheck -->|No / Timeout / Error| Fallback[Transparent Fallback to Rules<br/>Tagged as Heuristic Fallback]
-    
-    Heuristics --> Dashboard[Interactive Triage Dashboard]
-    Ollama --> Dashboard
-    Fallback --> Dashboard
+    Engine --> Dashboard[Accessible Triage Dashboard<br/>• High-Contrast Badges & Metrics<br/>• Reproduction Pillar Breakdown<br/>• Maintainer Action Items]
     
     Dashboard --> Export[Export Options: JSON / CSV]
 ```
@@ -55,8 +46,8 @@ flowchart TD
 
 ## 💻 System Requirements & Constraints
 
-- **Operating System:** Windows 10/11 (fully tested on PowerShell), macOS, or Linux.
-- **Hardware:** Runs comfortably on an 8 GB RAM laptop without a dedicated GPU.
+- **Operating System:** Windows 10/11 (fully tested in PowerShell), macOS, or Linux.
+- **Hardware:** Runs on any standard laptop with 8 GB RAM and no dedicated GPU.
 - **Python Version:** Python 3.10+ (tested on Python 3.11 and 3.14).
 - **Cost:** **$0.00**. No paid APIs, no API keys required, and no credit card needed.
 - **Network:** Uses GitHub's free public REST API (up to 60 requests/hour unauthenticated; optional free Personal Access Token unlocks 5,000 requests/hour).
@@ -68,7 +59,7 @@ flowchart TD
 ### 1. Clone the Repository
 Open Windows PowerShell:
 ```powershell
-git clone https://github.com/Rudra-Bhullar/RepoRelief-AI.git
+git clone https://github.com/rudraism19/RepoRelief-AI.git
 cd RepoRelief-AI
 ```
 
@@ -84,56 +75,48 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 4. (Optional) Configure Environment
-Copy the example configuration:
-```powershell
-Copy-Item .env.example .env
-```
-*(Leave `.env` untouched for default unauthenticated public access, or add a free GitHub Personal Access Token to raise rate limits).*
-
-### 5. Launch the Application
+### 4. Launch the Application (Zero Setup Required!)
 ```powershell
 streamlit run app.py
 ```
 Your browser will open automatically at `http://localhost:8501`.
 
+RepoRelief AI works immediately out of the box using GitHub's public unauthenticated REST API. No tokens, no credentials, and no setup are needed!
+
+*(Optional: If you are doing heavy batch triage and wish to raise GitHub's public rate limit from 60 to 5,000 requests/hour, you can optionally copy `.env.example` to `.env` and set `GITHUB_TOKEN=your_token_here`).*
+
 ---
 
-## ⚙️ Running Modes
+## 🌐 Analyzing Any Public GitHub Repository (Worldwide)
 
-### Mode A: Zero-LLM Deterministic Mode (Default)
-- **No setup required.** Works immediately out of the box.
-- Uses documented keyword analysis, label signals, and structural markdown patterns.
-- Fast execution (triages 30 issues in < 1 second).
-- Zero RAM overhead; 100% offline once issues are fetched.
+RepoRelief AI is **not** restricted to predefined repositories. You can analyze **any public GitHub repository in the world** simply by entering its slug or URL into the sidebar input:
 
-### Mode B: Local LLM via Ollama (Optional)
-If you wish to use local generative AI for natural-language summaries:
-1. Download and install Ollama for Windows from [ollama.com](https://ollama.com).
-2. Pull the lightweight 3B parameter model:
-   ```powershell
-   ollama pull llama3.2:3b
+### Supported Input Formats
+- `owner/repo` (e.g. `pallets/flask`, `facebook/react`, `torvalds/linux`, `rust-lang/rust`)
+- `https://github.com/owner/repo` (e.g. `https://github.com/encode/starlette`)
+- `https://github.com/owner/repo/issues`
+
+### How It Works
+1. **Direct Public REST API:** Issues are fetched directly using:
+   ```http
+   GET https://api.github.com/repos/{owner}/{repo}/issues?state=open&per_page=100
    ```
-3. Start Ollama (default port `11434`):
-   ```powershell
-   ollama serve
-   ```
-4. In the RepoRelief AI sidebar, select **"Local LLM via Ollama (Optional)"**.
-5. Click **"Test Ollama Connection"** to verify connectivity.
-
-> [!NOTE]
-> **Transparent Fallback Guarantee:** If Ollama is turned off, times out, or produces invalid output, RepoRelief AI automatically falls back to deterministic analysis and labels the result as `Rule-based Heuristic (Ollama Fallback)` with the exact reason. It **never** pretends rule-based results came from an LLM.
+   No search API queries, token prerequisites, or personal repository permissions are ever requested.
+2. **Transparent Pagination:** When requesting more than 100 issues (slider supports up to 250), RepoRelief AI automatically paginates across subsequent pages (`page=1`, `page=2`...) until the requested limit is reached or all open issues are collected.
+3. **Pull Request Exclusion:** Pull requests are automatically excluded from the issue stream.
+4. **Suggestions vs. Custom Inputs:** The quick-load suggestions in the UI are optional shortcuts; you can freely type any public repository name.
+5. **Clear Error Diagnostics:** If an input URL is invalid, a repository is private/nonexistent (HTTP 404), or public rate limits are hit (HTTP 403), friendly diagnostic messages explain the resolution immediately.
 
 ---
 
 ## 🔍 Triage Heuristics & Confidence Model
 
-### Priority Classification
+### Priority Classification Matrix
 | Priority | Definition | Trigger Heuristics |
 | :--- | :--- | :--- |
-| **`P0` (Blocker)** | Critical blocker, system crash, or data loss | Explicit mentions of `segfault`, `data loss`, `data corruption`, `CVE`, `vulnerability`, `deadlock`, `unbootable`, or `critical` labels. |
-| **`P1` (High)** | Major functional break or core workflow regression | `regression`, `broken workflow`, `fails to build`, `memory leak`, `crash on startup`, `performance drop`. |
-| **`P2` (Medium)** | Standard bug or general feature request | General functional bugs, non-critical exceptions with workarounds, common feature requests. |
+| **`P0` (Blocker)** | Critical blocker, system crash, or data loss | Mentions of `segfault`, `data loss`, `data corruption`, `cve`, `vulnerability`, `rce`, `deadlock`, `kernel panic`, `unbootable`, or `critical` labels. |
+| **`P1` (High)** | Major functional break or core workflow regression | `regression`, `broken workflow`, `fails to build`, `memory leak`, `crash on startup`, `performance drop`, or `blocking release`. |
+| **`P2` (Medium)** | Standard bug or general feature request | General functional bugs, non-critical exceptions with workarounds, common feature enhancements. |
 | **`P3` (Low)** | Cosmetic, typo, documentation, or question | `documentation`, `typo`, `spelling`, `cosmetic`, `nit`, or usage inquiry. |
 
 ### Reproduction Audit (The 4 Pillars)
@@ -148,8 +131,23 @@ Completeness is categorized as:
 - **Partial:** 1–2 pillars present.
 - **Missing:** 0 pillars present (flags maintainer action items).
 
-### Confidence Reporting
-Confidence is reported qualitatively as **High**, **Medium**, or **Low** based on signal strength (e.g., repository labels vs. text keywords). We **do not** display artificial pseudo-calibrated percentages (such as "97.4% confident").
+### Transparent Confidence Reporting
+Confidence is reported qualitatively as **High**, **Medium**, or **Low** based on verifiable signal strength:
+- **High:** Explicit repository labels matched or multiple strong keywords in both title and body.
+- **Medium:** Moderate keyword signals matched in text.
+- **Low:** Insufficient keyword or label matches; categorized using safe defaults.
+
+> [!NOTE]
+> We **never** present heuristic estimates as calibrated statistical probabilities (e.g. no "98.2% probability"). Every classification is accompanied by an explicit explanation of the matched signals.
+
+---
+
+## ♿ Dashboard Accessibility
+
+RepoRelief AI includes dedicated accessibility enhancements:
+- **High-Contrast Badges:** Priority (`P0` Dark Red, `P1` Orange, `P2` Blue, `P3` Green) and Category badges feature solid backgrounds with high-contrast white text exceeding WCAG AA standards.
+- **Accessible Privacy Banner:** Custom contrast-tuned banner with distinct border and text formatting to ensure legibility across both Light and Dark themes.
+- **Structured Tabs:** Clean separation between Reproduction Audits, Actionable Checklists, and Original Issue Descriptions.
 
 ---
 
@@ -163,7 +161,7 @@ Confidence is reported qualitatively as **High**, **Medium**, or **Low** based o
 
 ## 🧪 Testing & Verification
 
-The test suite contains 42 unit tests with 100% mocked network requests. No live GitHub credentials or running LLMs are needed to run tests.
+The test suite contains 66 unit tests with 100% mocked network requests covering arbitrary repositories, multi-page pagination, and unauthenticated/authenticated workflows. No live GitHub credentials or network access are required to run tests.
 
 Run the test suite in PowerShell:
 ```powershell
@@ -171,18 +169,25 @@ python -m pytest tests/ -v
 ```
 
 ### Verified Test Suites:
-- `tests/test_github_client.py`:
+- `tests/test_github_client.py` (42 tests):
+  - Validates parsing and fetching for arbitrary public repositories (`torvalds/linux`, `facebook/react`, `rust-lang/rust`, `kubernetes/kubernetes`, custom orgs/repos).
+  - Validates multi-page pagination beyond 100 issues (e.g. 150+ issues fetching across `page=1`, `page=2` with `per_page=100`).
+  - Validates pagination termination when a page returns fewer than 100 items.
+  - Validates unauthenticated public API requests using `state=open` and `per_page=100` with no authorization headers.
+  - Validates optional authenticated requests using Bearer tokens when configured.
+  - Validates that empty strings or whitespace tokens are cleanly treated as unauthenticated requests with no authorization headers.
+  - Validates handling of unauthenticated rate limits (HTTP 403), 404 Not Found, 401 Unauthorized, and network timeouts / connection failures.
   - Validates GitHub URL formats (`https://github.com/owner/repo`, `owner/repo`, SSH, trailing slashes, `.git`).
   - Rejects malicious inputs, directory traversal (`owner/../evil`), and non-GitHub hosts.
   - Verifies pull requests are strictly excluded from issue streams.
-  - Verifies rate limit handling, 404 Not Found, 401 Unauthorized, and timeout recoveries.
-- `tests/test_triage.py`:
+  - Verifies empty repositories and PR-only repositories return empty lists gracefully.
+- `tests/test_triage.py` (24 tests):
   - Validates prompt injection sanitization and length bounds.
   - Validates deterministic category and priority heuristics across P0–P3.
   - Validates reproduction pillar auditing (Complete, Partial, Missing).
   - Validates qualitative confidence reporting.
-  - Tests local Ollama client integration, JSON schema parsing, and transparent fallback upon network error or malformed LLM responses.
-  - Validates JSON and CSV export formats.
+  - Validates actionable checklist derivation for bugs, features, and docs.
+  - Validates JSON and CSV export formatting and DataFrame serialization.
 
 ---
 
@@ -191,13 +196,12 @@ python -m pytest tests/ -v
 When taking screenshots of RepoRelief AI for hackathon submissions or demos, capture the following states:
 
 1. **Dashboard Overview:** Top KPI metrics (Total Issues, Bugs, Features, Urgent P0/P1, Missing Repro) for `pallets/flask`.
-2. **Sidebar Controls:** Repository input, max issues slider, engine selector, and GitHub rate limit meter.
+2. **Sidebar Controls:** Repository input, max issues slider, engine mode indicator, and GitHub rate limit quota meter.
 3. **Issue Card Details:**
-   - Color-coded badges: Category, Priority (`P0`–`P3`), Reproduction status, Confidence, and Engine method.
-   - **Reproduction Audit Tab:** Green checkmarks vs. red crosses showing missing contributor data.
+   - Color-coded high-contrast badges: Priority (`P0`–`P3`), Category, Reproduction status, and Confidence.
+   - **Reproduction Audit Tab:** Visual checklist of present vs. missing contributor data.
    - **Actionable Checklist Tab:** Maintainer action items with interactive checkboxes.
-4. **Fallback Notification Banner:** Showing transparent fallback notice when Ollama is offline.
-5. **Export Section:** Download buttons for JSON and CSV exports.
+4. **Export Section:** Download buttons for JSON and CSV exports.
 
 ---
 
@@ -206,7 +210,7 @@ When taking screenshots of RepoRelief AI for hackathon submissions or demos, cap
 In compliance with open-source hackathon guidelines:
 - **Architecture, Code & Tests:** Authored with the assistance of the Google DeepMind Antigravity AI pair programming environment.
 - **GitHub Copilot:** Not used.
-- **Cloud LLM APIs:** Zero paid third-party APIs used. Optional local inference is powered by open weights (`llama3.2:3b` via Ollama).
+- **Cloud LLM APIs:** Zero paid third-party APIs used. Powered entirely by a deterministic Python engine.
 
 ---
 
